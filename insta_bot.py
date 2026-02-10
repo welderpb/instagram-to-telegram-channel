@@ -15,17 +15,19 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHANNEL_ID = os.getenv("CHANNEL_ID")
 IG_USERNAME = os.getenv("IG_USERNAME")
 
-# Safety check to ensure variables are loaded
-if not BOT_TOKEN or not CHANNEL_ID:
-    print("❌ Error: BOT_TOKEN or CHANNEL_ID not found in environment variables.")
-    print("Please set them in your terminal or a .env file.")
-    sys.exit(1)
-
 # Configure logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
+
+logger = logging.getLogger(__name__)
+
+# Safety check to ensure variables are loaded
+if not BOT_TOKEN or not CHANNEL_ID:
+    logger.error(f"❌ Error: BOT_TOKEN or CHANNEL_ID not found in environment variables.")
+    logger.error(f"Please set them in your terminal or a .env file.")
+    sys.exit(1)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -126,7 +128,7 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
         await status_msg.edit_text("✅ Reposted!")
 
     except Exception as e:
-        logging.error(f"Error: {e}")
+        logger.error(f"Error: {e}")
         await status_msg.edit_text(f"❌ Error: {str(e)}")
     
     finally:
@@ -140,8 +142,8 @@ if __name__ == '__main__':
     instagram_filter = filters.TEXT & ~filters.COMMAND & filters.Regex(r"instagram\.com")
     application.add_handler(MessageHandler(instagram_filter, handle_instagram_link))
     
-    print(f"Bot started. Forwarding to channel: {CHANNEL_ID}")
+    logger.info(f"Bot started. Forwarding to channel: {CHANNEL_ID}")
     if IG_USERNAME:
-        print(f"configured to use Instagram account: {IG_USERNAME}")
+        logger.info(f"configured to use Instagram account: {IG_USERNAME}")
 
     application.run_polling()
