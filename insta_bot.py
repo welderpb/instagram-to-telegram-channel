@@ -13,6 +13,7 @@ load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHANNEL_ID = os.getenv("CHANNEL_ID")
+IG_USERNAME = os.getenv("IG_USERNAME")
 
 # Safety check to ensure variables are loaded
 if not BOT_TOKEN or not CHANNEL_ID:
@@ -55,6 +56,19 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
             save_metadata=False,
             compress_json=False
         )
+
+        # Try to load session if username is provided
+        if IG_USERNAME:
+            session_file = f"session-{IG_USERNAME}"
+            if os.path.exists(session_file):
+                try:
+                    logger.info(f"Attempting to load session from {session_file}...")
+                    L.load_session_from_file(IG_USERNAME, filename=session_file)
+                    logger.info("✅ Session loaded successfully!")
+                except Exception as e:
+                    logger.error(f"⚠️ Failed to load session: {e}")
+            else:
+                logger.warning(f"⚠️ Session file '{session_file}' not found. Running anonymously (risky).")
 
         # Extract Shortcode
         shortcode = None
@@ -127,4 +141,7 @@ if __name__ == '__main__':
     application.add_handler(MessageHandler(instagram_filter, handle_instagram_link))
     
     print(f"Bot started. Forwarding to channel: {CHANNEL_ID}")
+    if IG_USERNAME:
+        print(f"configured to use Instagram account: {IG_USERNAME}")
+
     application.run_polling()
