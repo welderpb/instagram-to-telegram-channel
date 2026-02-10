@@ -86,6 +86,20 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
         post = instaloader.Post.from_shortcode(L.context, shortcode)
         L.download_post(post, target=download_folder)
 
+        # --- CAPTION HANDLING ---
+        original_caption = post.caption if post.caption else ""
+
+        # Telegram Caption Limit is 1024 chars. We reserve ~100 chars for the footer.
+        max_caption_length = 900
+        if len(original_caption) > max_caption_length:
+            original_caption = original_caption[:max_caption_length] + "..."
+
+        # Construct final caption with original text + link
+        final_caption = (
+            f"{original_caption}\n\n"
+            f"🔗 <a href='{url}'>Original Link</a>"
+        )
+
         # --- UPLOAD LOGIC ---
         await status_msg.edit_text("📤 Uploading to channel...")
 
@@ -107,16 +121,18 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
             file = media_files[0]
             with open(file["path"], 'rb') as f:
                 if file["type"] == "photo":
-                    await context.bot.send_photo(chat_id=CHANNEL_ID, photo=f, caption=caption, parse_mode='HTML')
+                    await context.bot.send_photo(chat_id=CHANNEL_ID, photo=f, caption=final_caption, parse_mode='HTML')
                 else:
-                    await context.bot.send_video(chat_id=CHANNEL_ID, video=f, caption=caption, parse_mode='HTML')
+                    await context.bot.send_video(chat_id=CHANNEL_ID, video=f, caption=final_caption, parse_mode='HTML')
         else:
             # Carousel handling
             media_group = []
             for index, file in enumerate(media_files):
                 with open(file["path"], 'rb') as f:
                     file_content = f.read() 
-                media_caption = caption if index == 0 else None
+
+                # Only attach caption to the first item
+                media_caption = final_caption if index == 0 else None
                 
                 if file["type"] == "photo":
                     media_group.append(InputMediaPhoto(media=file_content, caption=media_caption, parse_mode='HTML'))
