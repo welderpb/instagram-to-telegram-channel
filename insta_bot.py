@@ -5,6 +5,7 @@ import sys
 from telegram import Update, InputMediaPhoto, InputMediaVideo
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
 import instaloader
+from instaloader import Profile
 from dotenv import load_dotenv
 
 # --- CONFIGURATION ---
@@ -14,6 +15,7 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHANNEL_ID = os.getenv("CHANNEL_ID")
 IG_USERNAME = os.getenv("IG_USERNAME")
+ALLOWED_USER_IDS_RAW = os.getenv("ALLOWED_USER_IDS", "")
 
 # Configure logging
 logging.basicConfig(
@@ -29,24 +31,46 @@ if not BOT_TOKEN or not CHANNEL_ID:
     logger.error(f"Please set them in your terminal or a .env file.")
     sys.exit(1)
 
+# Parse allowed IDs into a set of integers for fast lookup
+try:
+    ALLOWED_IDS = {int(x.strip()) for x in ALLOWED_USER_IDS_RAW.split(",") if x.strip()}
+except ValueError:
+    logger.error("❌ Error: ALLOWED_USER_IDS must contain only numbers separated by commas.")
+    sys.exit(1)
+
+async def check_auth(update: Update):
+    """Checks if the user is authorized."""
+    user_id = update.effective_user.id
+    if user_id not in ALLOWED_IDS:
+        logger.warning(f"⛔ Unauthorized access attempt from ID: {user_id} ({update.effective_user.first_name})")
+        await update.message.reply_text(f"⛔ You are not authorized to use this bot.\nYour ID: `{user_id}`", parse_mode='Markdown')
+        return False
+    return True
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await check_auth(update):
+        return
     await update.message.reply_text(
         "👋 Hello! Send me an Instagram link, and I will repost it to the channel."
     )
 
 async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Authorization Check
+    if not await check_auth(update):
+        return
+
     url = update.message.text
     user_first_name = update.effective_user.first_name
-    
+
     if "instagram.com" not in url:
         await update.message.reply_text("❌ That doesn't look like an Instagram link.")
         return
 
     status_msg = await update.message.reply_text("⏳ Downloading content...")
-    
+
     # Create temp directory using message ID
     download_folder = f"temp_{update.message.message_id}"
-    
+
     try:
         # --- DOWNLOAD LOGIC ---
         L = instaloader.Instaloader(
@@ -72,18 +96,31 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
             else:
                 logger.warning(f"⚠️ Session file '{session_file}' not found. Running anonymously (risky).")
 
+        if L:
+            # Verify Login works by accessing own profile metadata
+            try:
+                profile = Profile.from_username(L.context, IG_USERNAME)
+                logger.info("--- Login Verification ---")
+                logger.info(f"Logged in as: {profile.username}")
+                logger.info(f"User ID: {profile.userid}")
+                logger.debug(f"Followers: {profile.followers}")
+
+            except Exception as e:
+                print(f"Session might be expired or invalid. Error: {e}")
+
         # Extract Shortcode
         shortcode = None
         if "/reel/" in url:
             shortcode = url.split("/reel/")[1].split("/")[0].split("?")[0]
         elif "/p/" in url:
             shortcode = url.split("/p/")[1].split("/")[0].split("?")[0]
-        
+
         if not shortcode:
             await status_msg.edit_text("❌ Could not parse Instagram shortcode.")
             return
 
         post = instaloader.Post.from_shortcode(L.context, shortcode)
+        logger.info("Downloading post...")
         L.download_post(post, target=download_folder)
 
         # --- CAPTION HANDLING ---
@@ -161,5 +198,6 @@ if __name__ == '__main__':
     logger.info(f"Bot started. Forwarding to channel: {CHANNEL_ID}")
     if IG_USERNAME:
         logger.info(f"configured to use Instagram account: {IG_USERNAME}")
+    logger.info(f"Allowed User IDs: {ALLOWED_IDS}")
 
     application.run_polling()
