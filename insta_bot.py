@@ -74,6 +74,7 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
     try:
         # --- DOWNLOAD LOGIC ---
         L = instaloader.Instaloader(
+            max_connection_attempts=1,
             download_pictures=True,
             download_videos=True, 
             download_video_thumbnails=False,
@@ -97,13 +98,12 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
                 logger.warning(f"⚠️ Session file '{session_file}' not found. Running anonymously (risky).")
 
         if L:
-            # Verify Login works by accessing own profile metadata
             try:
-                profile = Profile.from_username(L.context, IG_USERNAME)
-                logger.info("--- Login Verification ---")
-                logger.info(f"Logged in as: {profile.username}")
-                logger.info(f"User ID: {profile.userid}")
-                logger.debug(f"Followers: {profile.followers}")
+                test_username = L.test_login()
+                if test_username != IG_USERNAME:
+                    logger.info('Session expired or invalid. Please renew session file.')
+                else:
+                    logger.info(f'Session is active for {IG_USERNAME}.')
 
             except Exception as e:
                 print(f"Session might be expired or invalid. Error: {e}")

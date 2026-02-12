@@ -79,6 +79,8 @@ except Exception as e:
 3. Enter your password when prompted.
 4. This generates a file named `session-yourusername`. **Keep this file safe!**
 
+Or you can use this script [login-error](https://instaloader.github.io/troubleshooting.html#login-error) to save session file from browser cookies.
+
 ---
 
 ## ▶️ Running the Bot
