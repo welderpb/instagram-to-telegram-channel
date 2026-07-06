@@ -2,6 +2,7 @@ import os
 import shutil
 import logging
 import sys
+import traceback
 from telegram import Update, InputMediaPhoto, InputMediaVideo
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
 import instaloader
@@ -181,7 +182,7 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
         await status_msg.edit_text("✅ Reposted!")
 
     except Exception as e:
-        logger.error(f"Error: {e}")
+        logger.error(f"Error: {e}\n{traceback.format_exc()}")
         await status_msg.edit_text(f"❌ Error: {str(e)}")
     
     finally:
