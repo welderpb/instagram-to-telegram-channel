@@ -9,7 +9,6 @@ import traceback
 from telegram import Update, InputMediaPhoto, InputMediaVideo
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
 import instaloader
-from instaloader import Profile
 from dotenv import load_dotenv
 
 # --- CONFIGURATION ---
@@ -49,6 +48,25 @@ except ValueError:
 L: instaloader.Instaloader = None
 # Guards the shared instance in case update handling ever becomes concurrent.
 loader_lock = asyncio.Lock()
+SESSION_FILE = f"session-{IG_USERNAME}" if IG_USERNAME else None
+# mtime of the session file L was built from; a change triggers a reload.
+session_mtime = None
+
+
+def current_session_mtime():
+    return os.path.getmtime(SESSION_FILE) if SESSION_FILE and os.path.exists(SESSION_FILE) else None
+
+
+def get_loader() -> instaloader.Instaloader:
+    """Return the shared loader, rebuilding it if the session file was replaced."""
+    global L, session_mtime
+    mtime = current_session_mtime()
+    if L is None or mtime != session_mtime:
+        if L is not None:
+            logger.info("Session file changed, reloading Instaloader...")
+        L = build_loader()
+        session_mtime = mtime
+    return L
 
 
 def build_loader() -> instaloader.Instaloader:
@@ -64,8 +82,8 @@ def build_loader() -> instaloader.Instaloader:
         compress_json=False
     )
 
-    if IG_USERNAME:
-        session_file = f"session-{IG_USERNAME}"
+    if SESSION_FILE:
+        session_file = SESSION_FILE
         if os.path.exists(session_file):
             try:
                 logger.info(f"Attempting to load session from {session_file}...")
@@ -124,20 +142,18 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
     try:
         # --- DOWNLOAD LOGIC ---
         # Extract Shortcode
-        shortcode = None
-        if "/reel/" in url:
-            shortcode = url.split("/reel/")[1].split("/")[0].split("?")[0]
-        elif "/p/" in url:
-            shortcode = url.split("/p/")[1].split("/")[0].split("?")[0]
+        m = re.search(r"/(?:p|reels?|tv)/([^/?#]+)", url)
+        shortcode = m.group(1) if m else None
 
         if not shortcode:
             await status_msg.edit_text("❌ Could not parse Instagram shortcode.")
             return
 
         def fetch_post():
-            post = instaloader.Post.from_shortcode(L.context, shortcode)
+            loader = get_loader()
+            post = instaloader.Post.from_shortcode(loader.context, shortcode)
             logger.info("Downloading post...")
-            L.download_post(post, target=download_folder)
+            loader.download_post(post, target=download_folder)
             return post
 
         # Serialize access to the shared Instaloader instance. Instaloader blocks
@@ -213,13 +229,13 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
             shutil.rmtree(download_folder)
 
 if __name__ == '__main__':
-    # Build the shared Instaloader instance once, before polling starts.
-    L = build_loader()
+    # Build the shared Instaloader instance before polling starts.
+    get_loader()
 
     application = ApplicationBuilder().token(BOT_TOKEN).build()
     
-    application.add_handler(CommandHandler('start', start))
-    instagram_filter = filters.TEXT & ~filters.COMMAND & filters.Regex(r"instagram\.com")
+    application.add_handler(CommandHandler('start', start, filters=filters.UpdateType.MESSAGE))
+    instagram_filter = filters.UpdateType.MESSAGE & filters.TEXT & ~filters.COMMAND & filters.Regex(r"instagram\.com")
     application.add_handler(MessageHandler(instagram_filter, handle_instagram_link))
     
     logger.info(f"Bot started. Forwarding to channel: {CHANNEL_ID}")
