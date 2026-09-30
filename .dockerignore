@@ -3,3 +3,4 @@ temp_*
 .env
 .git
 venv
+session-*

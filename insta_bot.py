@@ -1,4 +1,6 @@
 import os
+import re
+import html
 import shutil
 import logging
 import sys
@@ -107,12 +109,12 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
     if not await check_auth(update):
         return
 
-    url = update.message.text
-    user_first_name = update.effective_user.first_name
-
-    if "instagram.com" not in url:
+    # Pull the link itself out of the message; users may send surrounding text.
+    match = re.search(r"(?:https?://)?(?:www\.)?instagram\.com/\S+", update.message.text)
+    if not match:
         await update.message.reply_text("❌ That doesn't look like an Instagram link.")
         return
+    url = match.group(0)
 
     status_msg = await update.message.reply_text("⏳ Downloading content...")
 
@@ -132,11 +134,16 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
             await status_msg.edit_text("❌ Could not parse Instagram shortcode.")
             return
 
-        # Serialize access to the shared Instaloader instance.
-        async with loader_lock:
+        def fetch_post():
             post = instaloader.Post.from_shortcode(L.context, shortcode)
             logger.info("Downloading post...")
             L.download_post(post, target=download_folder)
+            return post
+
+        # Serialize access to the shared Instaloader instance. Instaloader blocks
+        # (including time.sleep for rate limiting), so run it off the event loop.
+        async with loader_lock:
+            post = await asyncio.to_thread(fetch_post)
 
         # --- CAPTION HANDLING ---
         original_caption = post.caption if post.caption else ""
@@ -146,10 +153,10 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
         if len(original_caption) > max_caption_length:
             original_caption = original_caption[:max_caption_length] + "..."
 
-        # Construct final caption with original text + link
+        # Construct final caption with original text + link (escaped for HTML parse mode)
         final_caption = (
-            f"{original_caption}\n\n"
-            f"🔗 <a href='{url}'>Original Link</a>"
+            f"{html.escape(original_caption)}\n\n"
+            f"🔗 <a href=\"{html.escape(url)}\">Original Link</a>"
         )
 
         # --- UPLOAD LOGIC ---
@@ -162,8 +169,6 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
                 media_files.append({"type": "photo", "path": filepath})
             elif filename.endswith(".mp4"):
                 media_files.append({"type": "video", "path": filepath})
-
-        caption = f"📱 <b>New Post from Instagram</b>\n\nShared by: {user_first_name}\n🔗 <a href='{url}'>Original Link</a>"
 
         if not media_files:
             await status_msg.edit_text("❌ No media found to upload.")
@@ -191,7 +196,11 @@ async def handle_instagram_link(update: Update, context: ContextTypes.DEFAULT_TY
                 else:
                     media_group.append(InputMediaVideo(media=file_content, caption=media_caption, parse_mode='HTML'))
             
-            await context.bot.send_media_group(chat_id=CHANNEL_ID, media=media_group)
+            # Telegram allows 2-10 items per media group; split evenly so no chunk has 1 item
+            chunks = -(-len(media_group) // 10)
+            size = -(-len(media_group) // chunks)
+            for i in range(0, len(media_group), size):
+                await context.bot.send_media_group(chat_id=CHANNEL_ID, media=media_group[i:i + size])
 
         await status_msg.edit_text("✅ Reposted!")
 
