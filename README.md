@@ -79,7 +79,15 @@ except Exception as e:
 3. Enter your password when prompted.
 4. This generates a file named `session-yourusername`. **Keep this file safe!**
 
-Or you can use this script [login-error](https://instaloader.github.io/troubleshooting.html#login-error) to save session file from browser cookies.
+### Alternative: import the session from Firefox
+
+If the login above fails (e.g. `feedback_required`), log in to Instagram in Firefox and run the bundled script from the folder where the session file should be saved:
+
+```bash
+IG_USERNAME=your_instagram_username python tools/firefox_session.py ~/.mozilla/firefox/<profile>/cookies.sqlite
+```
+
+It reads the Instagram cookies from the Firefox profile and writes `session-<IG_USERNAME>`. `IG_USERNAME` can also come from `.env`. Find the profile path with `ls ~/.mozilla/firefox/*/cookies.sqlite`. The script skips `test_login()`, which is broken in instaloader 4.16 ([#2792](https://github.com/instaloader/instaloader/issues/2792)), so the bot may log "Session expired or invalid" at startup even if the session works — send it a link to verify.
 
 ---
 
