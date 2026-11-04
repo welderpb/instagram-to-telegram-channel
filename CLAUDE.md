@@ -35,7 +35,7 @@ CI (`.github/workflows/docker-publish.yml`) builds and pushes multi-arch (amd64/
 Downloading relies on `instaloader` session files named `session-<IG_USERNAME>`, generated locally via `instaloader.Instaloader().interactive_login(...)` + `save_session_to_file()` (see README for the full snippet). These files contain live login cookies:
 - Never commit them or treat their contents as loggable/shareable. A `session-welderpbg` file exists in this working tree untracked — treat it as a secret, not a code artifact.
 - In Docker, the session file is bind-mounted into `/app`, not baked into the image.
-- `requirements.txt` pins `instaloader` to a specific PyPI release (currently `4.15.3`); bump deliberately and re-verify session/login behavior since Instagram-facing scrapers break easily across versions.
+- `requirements.txt` pins `instaloader` to a specific PyPI release (currently `4.15.5`); bump deliberately and re-verify session/login behavior since Instagram-facing scrapers break easily across versions.
 
 ## Architecture (`insta_bot.py`)
 
