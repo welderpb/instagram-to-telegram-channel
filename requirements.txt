@@ -1,3 +1,3 @@
 python-telegram-bot==22.8
-instaloader @ https://github.com/ppdms/instaloader/archive/a62f608c621d47f2af9ec069295f5633549a1120.tar.gz
+instaloader @ https://github.com/ppdms/instaloader/archive/3e4d5ac0ec545a771a3a4b0b82cb313f32acb29f.tar.gz
 python-dotenv==1.2.2
